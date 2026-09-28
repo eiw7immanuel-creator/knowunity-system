@@ -55,13 +55,18 @@ Anyone who has the deployed URL can read and write, because the anon key ships w
 
 If someone already used the app on their own device: **Team → Data & storage → Download backup** there, then on the shared version **Restore backup**. Restoring replaces the whole board.
 
-## 3. First run for the team
+## 3. First run and inviting the team
 
-1. Open the link. Choose your name in **Who is using this device?** (it can be changed any time from the sidebar).
-2. **Team**: rename *Editor 1* to the editor's real name, add more editors if there are several.
-3. **Team → Posting rota**: pick the mode (alternate days is the default) and who starts. Check the "Next 10 days" preview.
-4. **Team → Drive folders**: paste the standing Raw / Edits / Assets folders.
-5. **Clear example data** (banner at the top), then send the first drop.
+1. Open the link and pick your own name.
+2. **Settings → Team**: rename *Editor 1* to the editor's real name, add more people if needed.
+3. **Settings → Team → Invite** next to a person copies a ready-made message: a personal link (`…#as-<id>`) plus a three-line explanation of what they do. Paste it into WhatsApp. Whoever opens that link is signed in as that person on that device, with no question asked, and sees their own Home (the editor: one card per drop with **Open footage** and **Deliver**).
+4. **Settings → Posting turns**: pick the mode (daily turns is the default) and who starts. Check the "Next 7 days" preview.
+5. **Settings → Drive folders**: paste the standing Raw / Edits / Assets folders.
+6. Send the first drop, then tap **Copy message for editor** and paste it into the chat. The board shows the drop on the editor's Home within seconds, but it does not send notifications by itself.
+
+## 4. How the live sync works
+
+With Supabase connected, every open tab checks the server every 8 seconds (a few kilobytes: ids and timestamps), downloads the board only when something changed, checks again 3 seconds after its own saves, and refreshes whenever the tab is brought back to the front. In practice a change made by one person shows up for the others within about 10 seconds, without reloading. **Settings → Data** shows the last sync time.
 
 ## Troubleshooting
 

@@ -15,7 +15,7 @@ Immanuel and Adam film in batches, two or three times a month. Each batch is a *
 | **Creator** (Immanuel, Adam) | Month progress, today's two posts with Instagram/TikTok ticks, videos to review with Approve buttons, what is with the editor, the next 7 days | Home · Calendar · Drops · Videos · Settings |
 | **Editor** | One big card per drop with the deadline, the notes, **Open footage** and one button (**Start editing** or **Deliver**), plus any video sent back with a note | Home · Videos · How it works |
 
-Everyone picks their name once on first open. Nothing is locked; it only decides what Home shows first.
+Everyone gets a personal invite link (**Settings → Team → Invite** copies it together with a three-line explanation). Opening it signs that device in as that person, so the editor never sees a chooser or a setting. Nothing is locked; it only decides what Home shows first.
 
 ## Pages
 
@@ -86,7 +86,8 @@ Every record is one row: `{ id, kind, data, updated_at }`.
 ## Development
 
 ```
-node tests/smoke.mjs
+node tests/smoke.mjs   # one browser: every page and the whole drop flow
+node tests/sync.mjs    # two browsers, one shared board (mock Supabase API)
 ```
 
-Boots the app in headless Chromium (needs Playwright), sends a drop, starts it, delivers four videos, approves, plans, posts, swaps a poster, filters the list, sends a video back with a note, checks the editor's home, changes settings, reloads to check persistence, clears the example data and checks the phone layout. Screenshots land in `tests/output/`.
+Both need Playwright and Chromium. The smoke test sends a drop, starts it, delivers four videos, approves, plans, posts, swaps a poster, filters the list, sends a video back with a note, checks the editor's home, changes settings, reloads to check persistence, clears the example data and checks the phone layout. The sync test runs a creator on desktop and the editor on a phone (signed in through the invite link) against an in-process imitation of Supabase's REST API, and checks that drops, deliveries, approvals, change notes and renames show up on the other side without a reload. Screenshots land in `tests/output/`.

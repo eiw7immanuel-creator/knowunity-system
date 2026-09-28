@@ -36,6 +36,7 @@ window.KUStore = (function () {
       mode: 'local',
       label: 'Saved on this device only',
       load: function () { return Promise.resolve(read().map(function (x) { return JSON.parse(JSON.stringify(x)); })); },
+      fingerprint: function () { return Promise.resolve(read().map(function (x) { return { id: x.id, updated_at: x.updated_at }; })); },
       put: function (item) { upsert(item); write(); return Promise.resolve(); },
       putMany: function (items) { items.forEach(upsert); write(); return Promise.resolve(); },
       remove: function (id) { cache = read().filter(function (x) { return x.id !== id; }); write(); return Promise.resolve(); },
@@ -83,6 +84,10 @@ window.KUStore = (function () {
       load: function () {
         return req('GET', '?select=id,kind,data,updated_at&order=updated_at.asc&limit=10000')
           .then(function (res) { return res.json(); });
+      },
+      /* ids + timestamps only: a few kilobytes, polled every few seconds to detect changes */
+      fingerprint: function () {
+        return req('GET', '?select=id,updated_at&limit=10000').then(function (res) { return res.json(); });
       },
       put: function (item) { return req('POST', '', [item], upsertHeaders).then(function () {}); },
       putMany: function (items) {

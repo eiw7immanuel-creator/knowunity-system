@@ -178,10 +178,10 @@
     recentWrites.set(data.id, Date.now());
     return item;
   }
-  function setSync(status, error) { state.sync = { status: status, error: error || '' }; }
+  function setSync(status, error) { state.sync = { status: status, error: error || '', lastSyncAt: state.sync.lastSyncAt || 0 }; }
   async function persist(fn) {
     setSync('busy');
-    try { await fn(); setSync('ok'); }
+    try { await fn(); setSync('ok'); if (store && store.mode === 'supabase') scheduleCheck(3000); }
     catch (e) { console.error(e); setSync('error', e.message); toast('Could not save: ' + e.message, 'crit'); }
   }
   async function save(kind, data, opts) {
@@ -555,7 +555,7 @@
 
     const weekCard = '<section class="card">' + cardHead('Next 7 days', emptyAhead ? plural(emptyAhead, 'empty slot') + ' to fill' : 'Every day is covered', (emptyAhead && st.ready ? '<button type="button" class="btn btn-sm btn-primary" data-action="autoFill" data-from="' + addDays(tk, 1) + '" data-days="14">' + I.wand + ' Fill empty days</button>' : '')) + weekStrip(addDays(tk, 1), 7) + '<div class="mt">' + legend() + '</div></section>';
 
-    return hello + '<div class="stack">' + progress + today + reviewCard + dropsCard + weekCard + '</div><div class="link-row"><a href="#help">How it works</a> · <a href="#" data-action="who">Switch person</a></div>';
+    return hello + '<div class="stack">' + welcomeCard('creator', m) + progress + today + reviewCard + dropsCard + weekCard + '</div><div class="link-row"><a href="#help">How it works</a> · <a href="#" data-action="who">Switch person</a></div>';
   }
 
   function homeEditor() {
@@ -590,7 +590,7 @@
 
     const stat = '<section class="card is-soft">' + cardHead('This month', 'Thank you for the work') + '<div class="progress-top"><span class="progress-num">' + monthDelivered + '</span><span class="progress-of">videos delivered 🎬</span></div><div class="small muted mt">Turnaround agreed with the team: ' + s.editorSlaHours + ' hours per drop.</div></section>';
 
-    return hello + '<div class="stack">' + dropsBlock + changesCard + waiting + stat + '</div><div class="link-row"><a href="#help">How it works</a> · <a href="#" data-action="who">Switch person</a></div>';
+    return hello + '<div class="stack">' + welcomeCard('editor', m) + dropsBlock + changesCard + waiting + stat + '</div><div class="link-row"><a href="#help">How it works</a> · <a href="#" data-action="who">Switch person</a></div>';
   }
 
   /* ---- Calendar ---- */
@@ -666,8 +666,8 @@
     const ms = members();
     const cs = rotaMembers();
     const youCard = '<section class="card">' + cardHead('You', m ? 'Chosen on this device. Only changes what Home shows first.' : 'Choose your name so Home shows your work first.', '<button type="button" class="btn btn-sm" data-action="who">' + I.swap + ' Switch</button>') + (m ? '<div class="row">' + avatar(m.id, 'avatar-lg') + '<div><div class="item-title">' + esc(m.name) + '</div><div class="item-sub">' + (m.role === 'creator' ? 'Creator' : 'Editor') + '</div></div></div>' : '') + '</section>';
-    const teamRows = ms.map((x) => '<div class="item is-click" data-action="openMember" data-id="' + x.id + '">' + avatar(x.id) + '<div class="item-main"><div class="item-title">' + esc(x.name) + '</div><div class="item-sub">' + (x.role === 'creator' ? 'Creator · films, reviews, posts' : 'Editor · edits and delivers') + '</div></div>' + I.edit + '</div>').join('');
-    const teamCard = '<section class="card">' + cardHead('Team', 'Tap a person to rename or recolour them', '<button type="button" class="btn btn-sm" data-action="openMember">' + I.plus + ' Add person</button>') + teamRows + '</section>';
+    const teamRows = ms.map((x) => '<div class="item is-click" data-action="openMember" data-id="' + x.id + '">' + avatar(x.id) + '<div class="item-main"><div class="item-title">' + esc(x.name) + '</div><div class="item-sub">' + (x.role === 'creator' ? 'Creator · films, reviews, posts' : 'Editor · edits and delivers') + '</div></div><div class="item-actions"><button type="button" class="btn btn-sm" data-action="copyInvite" data-id="' + x.id + '">' + I.copy + ' Invite</button>' + I.edit + '</div></div>').join('');
+    const teamCard = '<section class="card">' + cardHead('Team', '<b>Invite</b> copies a personal link plus a short explanation. Whoever opens that link is signed in as that person, no questions asked. Tap a name to rename or recolour.', '<button type="button" class="btn btn-sm" data-action="openMember">' + I.plus + ' Add person</button>') + teamRows + '</section>';
 
     const preview = [];
     for (let i = 0; i < 7; i++) { const k = addDays(todayKey(), i); const p = posterFor(k); preview.push('<span class="chip">' + esc(fmtDay(k)) + ' · ' + esc(p ? memberName(p.id) : '—') + '</span>'); }
@@ -702,7 +702,7 @@
       '<div class="row"><button class="btn btn-primary" type="submit">Save folders</button>' + linkBtn(s.driveRaw, 'Raw') + linkBtn(s.driveEdits, 'Edits') + linkBtn(s.driveAssets, 'Assets') + '</div></div></form></section>';
 
     const counts = { drops: byKind('drop').length, videos: byKind('video').length };
-    const dataCard = '<section class="card">' + cardHead('Data', (store.mode === 'supabase' ? 'Shared board: everyone sees the same thing.' : 'Saved in this browser only. To share one board with the team, connect Supabase (docs/SETUP.md).') + ' ' + plural(counts.drops, 'drop') + ', ' + plural(counts.videos, 'video') + '.') +
+    const dataCard = '<section class="card">' + cardHead('Data', (store.mode === 'supabase' ? 'Shared board: everyone sees the same thing.' + (state.sync.lastSyncAt ? ' Last synced ' + esc(fmtTime(new Date(state.sync.lastSyncAt).toISOString())) + '.' : '') : 'Saved in this browser only. To share one board with the team, connect Supabase (docs/SETUP.md).') + ' ' + plural(counts.drops, 'drop') + ', ' + plural(counts.videos, 'video') + '.') +
       '<div class="row"><button type="button" class="btn btn-sm" data-action="exportJson">' + I.download + ' Download backup</button><button type="button" class="btn btn-sm" data-action="copyJson">' + I.copy + ' Copy backup</button><label class="btn btn-sm">' + I.upload + ' Restore backup<input type="file" accept="application/json,.json" data-change="importFile" hidden></label>' + (store.mode === 'supabase' ? '<button type="button" class="btn btn-sm" data-action="reload">' + I.refresh + ' Refresh</button>' : '') + '</div>' +
       '<div class="row mt">' + (s.exampleData ? '<button type="button" class="btn btn-sm btn-ghost" data-action="clearExample" data-confirm="Clear every example drop and video?">Clear example data</button>' : '<button type="button" class="btn btn-sm btn-ghost" data-action="loadExample" data-confirm="Add example drops and videos?">Load example data</button>') + '<button type="button" class="btn btn-sm btn-danger" data-action="clearAll" data-confirm="Delete everything? This cannot be undone">' + I.trash + ' Clear all data</button></div></section>';
 
@@ -763,6 +763,7 @@
     const msg = d.status === 'delivered' || d.status === 'approved' ? '<button type="button" class="btn" data-action="copyDelivery" data-id="' + d.id + '">' + I.copy + ' Copy message</button>' : '<button type="button" class="btn" data-action="copyHandoff" data-id="' + d.id + '">' + I.copy + ' Copy message for editor</button>';
     const body = '<div class="row">' + dueChip(d) + dropChip(d) + memberChip(d.editorId) + '</div>' +
       '<div class="row">' + actions + linkBtn(d.driveLink, 'Open footage', '') + linkBtn(d.deliveredLink, 'Edited videos', '') + msg + '</div>' +
+      (d.status === 'sent' ? '<div class="hint">Next: copy the message and send it to ' + esc(firstName(memberName(d.editorId))) + ' in your chat. The board shows the drop on their Home, but it does not send notifications by itself.</div>' : '') +
       (d.brief ? '<div class="note wrap"><b>Notes for the editor:</b> ' + esc(d.brief) + '</div>' : '') +
       (d.deliveryNote ? '<div class="note wrap"><b>Editor says:</b> ' + esc(d.deliveryNote) + '</div>' : '') +
       '<div class="sec"><div class="sec-title">Progress</div>' + stages + '</div>' +
@@ -990,10 +991,51 @@
     el._armTimer = setTimeout(() => { if (el.isConnected) { el.classList.remove('is-armed'); el.innerHTML = el.dataset.label; } }, 4000);
   }
   function route() {
-    const hash = (location.hash || '#home').slice(1).replace(/[^a-z]/g, '');
+    const raw = (location.hash || '#home').slice(1);
+    if (raw.indexOf('as-') === 0) {
+      // Personal invite link (#as-<memberId>): signs this device in as that person, then opens Home.
+      const id = raw.slice(3).replace(/[^A-Za-z0-9_]/g, '');
+      const m = getItem(id);
+      if (m && !m.archived) { state.me = id; try { localStorage.setItem('ku:me', id); } catch (e) { /* ignore */ } closeSheet(); }
+      location.replace('#home');
+      return;
+    }
+    const hash = raw.replace(/[^a-z]/g, '');
     state.route = ROUTES[hash] ? hash : 'home';
     render();
     window.scrollTo(0, 0);
+  }
+  const inviteLink = (id) => location.href.split('#')[0] + '#as-' + id;
+  function inviteMessage(m) {
+    const s = S();
+    const link = inviteLink(m.id);
+    const who = creators().map((c) => firstName(c.name)).join(' or ') || 'the creators';
+    if (m.role === 'editor') {
+      return [
+        'Hi ' + firstName(m.name) + '! 👋 This is our content board: ' + link,
+        'It already knows you are ' + m.name + '. Open it on your phone and add it to your home screen.',
+        'When ' + who + ' send footage, one card appears on your Home:',
+        '1. Open footage → edit',
+        '2. Tap Deliver → paste the Drive folder with your exports, one title per line',
+        'You have ' + s.editorSlaHours + ' hours per drop. If a video comes back with a note, fix it and tap "Fixed, delivered again". That is all.'
+      ].join('\n');
+    }
+    return [
+      'Hi ' + firstName(m.name) + '! 👋 This is our content board: ' + link,
+      'It already knows you are ' + m.name + '. Home shows what to post today, what to approve and what is with the editor.',
+      'Send footage with "Send a drop", approve with one tap, and tick Instagram + TikTok after posting.'
+    ].join('\n');
+  }
+  function welcomeCard(role, m) {
+    if (!m) return '';
+    let seen = false;
+    try { seen = localStorage.getItem('ku:welcomed:' + m.id) === '1'; } catch (e) { seen = false; }
+    if (seen) return '';
+    const s = S();
+    const body = role === 'editor'
+      ? '<p>This is your inbox for footage. Every drop is one card with the deadline and the notes.</p><ol class="mt"><li><b>Open footage</b> and edit.</li><li>Tap <b>Deliver</b>, paste the Drive folder with your exports, one title per line.</li></ol><p class="mt">You have <b>' + s.editorSlaHours + ' hours</b> per drop. If a video comes back with a note, fix it and tap <b>Fixed, delivered again</b>.</p>'
+      : '<p>Home shows what to post today, what to approve and what is with the editor. Everything else lives in the tabs.</p><p class="mt">Send footage with <b>Send a drop</b>, approve with one tap, fill the calendar with <b>Fill empty days</b>.</p>';
+    return '<section class="card is-soft welcome">' + cardHead('Welcome, ' + esc(firstName(m.name)) + ' 👋', role === 'editor' ? 'How this works for you, in three lines' : 'Your board, in two lines', '<button type="button" class="btn btn-sm btn-primary" data-action="dismissWelcome" data-id="' + m.id + '">Got it</button>') + body + '</section>';
   }
   function parseClips(text, existing) {
     const names = String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
@@ -1020,6 +1062,8 @@
     closeSheet: () => closeSheet(),
     who: () => openSheet({ type: 'who' }),
     setMe: (ds) => { state.me = ds.id; try { localStorage.setItem('ku:me', ds.id); } catch (e) { /* ignore */ } closeSheet(); if (!navRoutes().includes(state.route)) location.hash = '#home'; render(); toast('Hi ' + firstName(memberName(ds.id)) + ' 👋'); },
+    dismissWelcome: (ds) => { try { localStorage.setItem('ku:welcomed:' + ds.id, '1'); } catch (e) { /* ignore */ } renderMain(); },
+    copyInvite: (ds) => { const m = getItem(ds.id); if (!m) return; copyText(inviteMessage(m), 'Invite copied. Send it to ' + firstName(m.name) + ' in your chat.'); },
     reload: () => reloadFromStore(true),
     gotoVideos: (ds) => { state.filters = { status: ds.status || '', drop: '', q: '' }; location.hash = '#videos'; },
     vfilter: (ds) => { state.filters.status = ds.status || ''; renderMain(); },
@@ -1287,14 +1331,43 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.sheet) closeSheet(); });
     window.addEventListener('hashchange', route);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { state.now = Date.now(); if (store && store.mode === 'supabase') reloadFromStore(false); else if (!state.sheet) renderMain(); } });
+    window.addEventListener('focus', () => { if (store && store.mode === 'supabase') checkForChanges(); });
   }
 
-  /* shared-board polling (Supabase mode) */
+  /* Shared-board sync (Supabase mode): a cheap id+timestamp check every few
+     seconds, a full reload only when something actually changed, an extra
+     check shortly after our own writes, and a reload whenever the tab comes back. */
   let pollTimer = null;
+  let checkTimer = null;
+  let checking = false;
+  const inFlight = (id, now) => { const t = recentWrites.get(id); return !!t && now - t < 10000; };
+  function scheduleCheck(ms) { clearTimeout(checkTimer); checkTimer = setTimeout(() => checkForChanges(), ms); }
+  async function checkForChanges() {
+    if (!store || store.mode !== 'supabase' || checking || state.sync.status === 'busy' || document.hidden) return;
+    checking = true;
+    try {
+      const fp = await store.fingerprint();
+      const now = Date.now();
+      const seen = {};
+      let changed = false;
+      fp.forEach((r) => {
+        if (!r || !r.id) return;
+        seen[r.id] = true;
+        if (changed || inFlight(r.id, now)) return;
+        const local = state.items.get(r.id);
+        if (!local || (local.updated_at || '') < (r.updated_at || '')) changed = true;
+      });
+      if (!changed) state.items.forEach((it, id) => { if (!seen[id] && !inFlight(id, now)) changed = true; });
+      if (changed) await reloadFromStore(false);
+      if (state.sync.status === 'error') setSync('ok');
+    } catch (e) { /* transient network error: the next check will try again */ }
+    finally { checking = false; }
+  }
   async function reloadFromStore(manual) {
     if (!store || state.sync.status === 'busy') return;
     try {
       const items = await store.load();
+      state.sync.lastSyncAt = Date.now();
       const seen = {};
       const now = Date.now();
       let changed = false;
@@ -1317,7 +1390,7 @@
   }
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => { if (!document.hidden) reloadFromStore(false); }, 20000);
+    pollTimer = setInterval(() => { if (!document.hidden) checkForChanges(); }, 8000);
   }
 
   /* ------------------------------------------------------------------------
@@ -1447,7 +1520,7 @@
     wireEvents();
     try { state.me = localStorage.getItem('ku:me') || null; } catch (e) { state.me = null; }
     let items = [];
-    try { items = await store.load(); }
+    try { items = await store.load(); state.sync.lastSyncAt = Date.now(); }
     catch (e) { console.error(e); setSync('error', e.message); }
     items.forEach((it) => { if (it && it.id && it.kind && it.data) state.items.set(it.id, it); });
     await ensureDefaults(true);
