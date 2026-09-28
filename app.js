@@ -165,6 +165,7 @@
     ready: false
   };
   let store = null;
+  const isShared = () => !!store && store.mode !== 'local';
   const recentWrites = new Map(); // id -> time of our last write; protects in-flight writes from polling
 
   const getItem = (id) => { const it = state.items.get(id); return it ? it.data : null; };
@@ -178,10 +179,10 @@
     recentWrites.set(data.id, Date.now());
     return item;
   }
-  function setSync(status, error) { state.sync = { status: status, error: error || '', lastSyncAt: state.sync.lastSyncAt || 0 }; }
+  function setSync(status, error) { state.sync = { status: status, error: error || '', lastSyncAt: state.sync.lastSyncAt || 0, live: state.sync.live || '' }; }
   async function persist(fn) {
     setSync('busy');
-    try { await fn(); setSync('ok'); if (store && store.mode === 'supabase') scheduleCheck(3000); }
+    try { await fn(); setSync('ok'); if (isShared()) scheduleCheck(3000); }
     catch (e) { console.error(e); setSync('error', e.message); toast('Could not save: ' + e.message, 'crit'); }
   }
   async function save(kind, data, opts) {
@@ -667,7 +668,7 @@
     const cs = rotaMembers();
     const youCard = '<section class="card">' + cardHead('You', m ? 'Chosen on this device. Only changes what Home shows first.' : 'Choose your name so Home shows your work first.', '<button type="button" class="btn btn-sm" data-action="who">' + I.swap + ' Switch</button>') + (m ? '<div class="row">' + avatar(m.id, 'avatar-lg') + '<div><div class="item-title">' + esc(m.name) + '</div><div class="item-sub">' + (m.role === 'creator' ? 'Creator' : 'Editor') + '</div></div></div>' : '') + '</section>';
     const teamRows = ms.map((x) => '<div class="item is-click" data-action="openMember" data-id="' + x.id + '">' + avatar(x.id) + '<div class="item-main"><div class="item-title">' + esc(x.name) + '</div><div class="item-sub">' + (x.role === 'creator' ? 'Creator · films, reviews, posts' : 'Editor · edits and delivers') + '</div></div><div class="item-actions"><button type="button" class="btn btn-sm" data-action="copyInvite" data-id="' + x.id + '">' + I.copy + ' Invite</button>' + I.edit + '</div></div>').join('');
-    const teamCard = '<section class="card">' + cardHead('Team', '<b>Invite</b> copies a personal link plus a short explanation. Whoever opens that link is signed in as that person, no questions asked. Tap a name to rename or recolour.', '<button type="button" class="btn btn-sm" data-action="openMember">' + I.plus + ' Add person</button>') + teamRows + '</section>';
+    const teamCard = '<section class="card">' + cardHead('Team', '<b>Invite</b> copies a personal link plus a short explanation. Whoever opens that link is ' + (store.mode === 'api' ? 'connected to the team server and ' : '') + 'signed in as that person, no questions asked. Tap a name to rename or recolour.', '<button type="button" class="btn btn-sm" data-action="openMember">' + I.plus + ' Add person</button>') + teamRows + '</section>';
 
     const preview = [];
     for (let i = 0; i < 7; i++) { const k = addDays(todayKey(), i); const p = posterFor(k); preview.push('<span class="chip">' + esc(fmtDay(k)) + ' · ' + esc(p ? memberName(p.id) : '—') + '</span>'); }
@@ -702,11 +703,27 @@
       '<div class="row"><button class="btn btn-primary" type="submit">Save folders</button>' + linkBtn(s.driveRaw, 'Raw') + linkBtn(s.driveEdits, 'Edits') + linkBtn(s.driveAssets, 'Assets') + '</div></div></form></section>';
 
     const counts = { drops: byKind('drop').length, videos: byKind('video').length };
-    const dataCard = '<section class="card">' + cardHead('Data', (store.mode === 'supabase' ? 'Shared board: everyone sees the same thing.' + (state.sync.lastSyncAt ? ' Last synced ' + esc(fmtTime(new Date(state.sync.lastSyncAt).toISOString())) + '.' : '') : 'Saved in this browser only. To share one board with the team, connect Supabase (docs/SETUP.md).') + ' ' + plural(counts.drops, 'drop') + ', ' + plural(counts.videos, 'video') + '.') +
-      '<div class="row"><button type="button" class="btn btn-sm" data-action="exportJson">' + I.download + ' Download backup</button><button type="button" class="btn btn-sm" data-action="copyJson">' + I.copy + ' Copy backup</button><label class="btn btn-sm">' + I.upload + ' Restore backup<input type="file" accept="application/json,.json" data-change="importFile" hidden></label>' + (store.mode === 'supabase' ? '<button type="button" class="btn btn-sm" data-action="reload">' + I.refresh + ' Refresh</button>' : '') + '</div>' +
+    const lastSync = state.sync.lastSyncAt ? esc(fmtTime(new Date(state.sync.lastSyncAt).toISOString())) : '—';
+    let serverCard;
+    if (store.mode === 'api') {
+      const live = state.sync.live === 'live' ? chip('Live', 'good') : state.sync.live === 'reconnecting' ? chip('Reconnecting…', 'warn') : chip('Connecting…', 'muted');
+      serverCard = '<section class="card">' + cardHead('Team server', 'Everyone with an invite sees this board. Changes arrive within a second.', live) +
+        '<dl class="kv"><dt>Server</dt><dd class="mono">' + esc(store.url) + '</dd><dt>Last synced</dt><dd>' + lastSync + (state.sync.status === 'error' ? ' · <span class="chip chip-bad">' + esc(state.sync.error) + '</span>' : '') + '</dd></dl>' +
+        '<div class="row mt"><button type="button" class="btn btn-sm" data-action="reload">' + I.refresh + ' Refresh</button><button type="button" class="btn btn-sm btn-ghost" data-action="disconnectServer" data-confirm="Disconnect this device from the team server?">Disconnect this device</button></div></section>';
+    } else if (store.mode === 'supabase') {
+      serverCard = '<section class="card">' + cardHead('Team server', 'Shared through Supabase. Last synced ' + lastSync + '.', '<button type="button" class="btn btn-sm" data-action="reload">' + I.refresh + ' Refresh</button>') + '</section>';
+    } else {
+      serverCard = '<section class="card"><form data-submit="connectServer">' + cardHead('Team server', 'This device is on its own right now. Connect it to your server so the whole team shares one live board. The two values come from the installer (server/install.sh).') +
+        '<div class="form"><div class="field"><label for="srvUrl">API URL</label><input type="url" id="srvUrl" name="url" placeholder="https://130-61-1-2.sslip.io" required></div>' +
+        '<div class="field"><label for="srvKey">Team key</label><input type="text" id="srvKey" name="key" placeholder="paste the key from the installer" required autocomplete="off" spellcheck="false"></div>' +
+        (counts.drops || counts.videos ? '<label class="check"><input type="checkbox" name="upload"' + (s.exampleData ? '' : ' checked') + '> Also upload this device\'s ' + plural(counts.drops, 'drop') + ' and ' + plural(counts.videos, 'video') + ' if the server is still empty</label>' : '') +
+        '<div class="row"><button class="btn btn-primary" type="submit">Connect</button></div></div></form></section>';
+    }
+    const dataCard = '<section class="card">' + cardHead('Data', plural(counts.drops, 'drop') + ', ' + plural(counts.videos, 'video') + ' on this board.') +
+      '<div class="row"><button type="button" class="btn btn-sm" data-action="exportJson">' + I.download + ' Download backup</button><button type="button" class="btn btn-sm" data-action="copyJson">' + I.copy + ' Copy backup</button><label class="btn btn-sm">' + I.upload + ' Restore backup<input type="file" accept="application/json,.json" data-change="importFile" hidden></label></div>' +
       '<div class="row mt">' + (s.exampleData ? '<button type="button" class="btn btn-sm btn-ghost" data-action="clearExample" data-confirm="Clear every example drop and video?">Clear example data</button>' : '<button type="button" class="btn btn-sm btn-ghost" data-action="loadExample" data-confirm="Add example drops and videos?">Load example data</button>') + '<button type="button" class="btn btn-sm btn-danger" data-action="clearAll" data-confirm="Delete everything? This cannot be undone">' + I.trash + ' Clear all data</button></div></section>';
 
-    return head('Settings', 'Who does what, how often, and where the files live.') + '<div class="stack">' + youCard + teamCard + rotaCard + targetsCard + driveCard + dataCard + '</div><div class="link-row"><a href="#help">How it works</a></div>';
+    return head('Settings', 'Who does what, how often, and where the files live.') + '<div class="stack">' + youCard + teamCard + rotaCard + targetsCard + driveCard + serverCard + dataCard + '</div><div class="link-row"><a href="#help">How it works</a></div>';
   }
 
   /* ---- How it works ---- */
@@ -990,8 +1007,37 @@
     clearTimeout(el._armTimer);
     el._armTimer = setTimeout(() => { if (el.isConnected) { el.classList.remove('is-armed'); el.innerHTML = el.dataset.label; } }, 4000);
   }
+  /* invite tokens: base64url of a small JSON object, safe inside a URL hash */
+  const toToken = (obj) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(obj));
+    let bin = '';
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  function fromToken(t) {
+    try {
+      const b = String(t).replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b + '='.repeat((4 - (b.length % 4)) % 4));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch (e) { return null; }
+  }
   function route() {
     const raw = (location.hash || '#home').slice(1);
+    if (raw.indexOf('join-') === 0) {
+      // Invite link with the team connection inside: connect this device, sign in, start fresh.
+      const t = fromToken(raw.slice(5));
+      history.replaceState(null, '', location.pathname + location.search + '#home');
+      if (t && /^https?:\/\//.test(String(t.u || '')) && t.k) {
+        window.KUStore.saveServer({ url: String(t.u), key: String(t.k) });
+        if (t.m) { try { localStorage.setItem('ku:me', String(t.m)); } catch (e) { /* ignore */ } }
+        location.reload();
+        return;
+      }
+      route();
+      return;
+    }
     if (raw.indexOf('as-') === 0) {
       // Personal invite link (#as-<memberId>): signs this device in as that person, then opens Home.
       const id = raw.slice(3).replace(/[^A-Za-z0-9_]/g, '');
@@ -1005,7 +1051,12 @@
     render();
     window.scrollTo(0, 0);
   }
-  const inviteLink = (id) => location.href.split('#')[0] + '#as-' + id;
+  /* An invite link carries the team-server connection (when there is one) and who the person is. */
+  const inviteLink = (id) => {
+    const base = location.href.split('#')[0];
+    if (store && store.mode === 'api') return base + '#join-' + toToken({ u: store.url, k: store.key, m: id });
+    return base + '#as-' + id;
+  };
   function inviteMessage(m) {
     const s = S();
     const link = inviteLink(m.id);
@@ -1063,6 +1114,27 @@
     who: () => openSheet({ type: 'who' }),
     setMe: (ds) => { state.me = ds.id; try { localStorage.setItem('ku:me', ds.id); } catch (e) { /* ignore */ } closeSheet(); if (!navRoutes().includes(state.route)) location.hash = '#home'; render(); toast('Hi ' + firstName(memberName(ds.id)) + ' 👋'); },
     dismissWelcome: (ds) => { try { localStorage.setItem('ku:welcomed:' + ds.id, '1'); } catch (e) { /* ignore */ } renderMain(); },
+    connectServer: async (ds, form) => {
+      const f = formData(form);
+      const url = String(f.url || '').trim().replace(/\/+$/, '');
+      const key = String(f.key || '').trim();
+      if (!/^https?:\/\//.test(url) || !key) { toast('Enter the API URL and the team key', 'crit'); return; }
+      const test = window.KUStore.apiStore({ url: url, key: key });
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+      try {
+        const h = await test.health();
+        if (!h || !h.ok || typeof h.items !== 'number') { const e = new Error('Team key not accepted'); e.status = 401; throw e; }
+        if (f.upload && h.items === 0) await test.putMany(Array.from(state.items.values()));
+        if (!window.KUStore.saveServer({ url: url, key: key })) throw new Error('This browser refused to remember the connection');
+        toast('Connected. Loading the shared board…');
+        setTimeout(() => location.reload(), 600);
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+        toast(e.status === 401 ? 'Team key not accepted. Check it in /etc/knowunity/env on the server.' : 'Could not reach the server: ' + e.message + '. Is it running, and are ports 80 and 443 open in the Oracle console?', 'crit');
+      }
+    },
+    disconnectServer: () => { window.KUStore.clearServer(); toast('Disconnected. Reloading…'); setTimeout(() => location.reload(), 500); },
     copyInvite: (ds) => { const m = getItem(ds.id); if (!m) return; copyText(inviteMessage(m), 'Invite copied. Send it to ' + firstName(m.name) + ' in your chat.'); },
     reload: () => reloadFromStore(true),
     gotoVideos: (ds) => { state.filters = { status: ds.status || '', drop: '', q: '' }; location.hash = '#videos'; },
@@ -1330,8 +1402,8 @@
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.sheet) closeSheet(); });
     window.addEventListener('hashchange', route);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) { state.now = Date.now(); if (store && store.mode === 'supabase') reloadFromStore(false); else if (!state.sheet) renderMain(); } });
-    window.addEventListener('focus', () => { if (store && store.mode === 'supabase') checkForChanges(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { state.now = Date.now(); if (isShared()) reloadFromStore(false); else if (!state.sheet) renderMain(); } });
+    window.addEventListener('focus', () => { if (isShared()) checkForChanges(); });
   }
 
   /* Shared-board sync (Supabase mode): a cheap id+timestamp check every few
@@ -1343,7 +1415,7 @@
   const inFlight = (id, now) => { const t = recentWrites.get(id); return !!t && now - t < 10000; };
   function scheduleCheck(ms) { clearTimeout(checkTimer); checkTimer = setTimeout(() => checkForChanges(), ms); }
   async function checkForChanges() {
-    if (!store || store.mode !== 'supabase' || checking || state.sync.status === 'busy' || document.hidden) return;
+    if (!isShared() || checking || state.sync.status === 'busy' || document.hidden) return;
     checking = true;
     try {
       const fp = await store.fingerprint();
@@ -1353,9 +1425,10 @@
       fp.forEach((r) => {
         if (!r || !r.id) return;
         seen[r.id] = true;
-        if (changed || inFlight(r.id, now)) return;
+        if (changed) return;
         const local = state.items.get(r.id);
-        if (!local || (local.updated_at || '') < (r.updated_at || '')) changed = true;
+        if (!local) { if (!inFlight(r.id, now)) changed = true; return; }
+        if ((local.updated_at || '') < (r.updated_at || '')) changed = true;
       });
       if (!changed) state.items.forEach((it, id) => { if (!seen[id] && !inFlight(id, now)) changed = true; });
       if (changed) await reloadFromStore(false);
@@ -1375,13 +1448,11 @@
         if (!it || !it.id) return;
         seen[it.id] = true;
         const local = state.items.get(it.id);
-        const recent = recentWrites.get(it.id);
-        if (recent && now - recent < 10000) return; // our own write is still in flight
-        if (!local || (local.updated_at || '') < (it.updated_at || '')) { state.items.set(it.id, it); changed = true; }
+        if (!local) { if (!inFlight(it.id, now)) { state.items.set(it.id, it); changed = true; } return; } // absent locally: unless we just deleted it
+        if ((local.updated_at || '') < (it.updated_at || '')) { state.items.set(it.id, it); changed = true; } // newer on the server always wins
       });
       Array.from(state.items.keys()).forEach((id) => {
-        const recent = recentWrites.get(id);
-        if (!seen[id] && !(recent && now - recent < 10000)) { state.items.delete(id); changed = true; }
+        if (!seen[id] && !inFlight(id, now)) { state.items.delete(id); changed = true; } // gone from the server: unless our write is still on its way
       });
       if (changed || manual) { await ensureDefaults(false); render(); if (state.sheet && changed) refreshSheet(); }
       if (manual) toast(changed ? 'Refreshed' : 'Already up to date');
@@ -1390,7 +1461,18 @@
   }
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => { if (!document.hidden) checkForChanges(); }, 8000);
+    let tick = 0;
+    // every 8 s normally; every 32 s while the live connection is up (then it is only a safety net)
+    pollTimer = setInterval(() => { tick++; if (!document.hidden && (state.sync.live !== 'live' || tick % 4 === 0)) checkForChanges(); }, 8000);
+  }
+  function startLive() {
+    if (!isShared() || typeof store.subscribe !== 'function') return;
+    state.sync.live = 'connecting';
+    store.subscribe(() => checkForChanges(), (st) => {
+      if (state.sync.live === st) return;
+      state.sync.live = st;
+      if (state.route === 'settings' && !state.sheet) renderMain();
+    });
   }
 
   /* ------------------------------------------------------------------------
@@ -1529,11 +1611,11 @@
     route();
     if (state.sync.status === 'error') toast('Could not load the shared board: ' + state.sync.error, 'crit');
     if (!state.me && members().length) openSheet({ type: 'who' });
-    if (store.mode === 'supabase') startPolling();
+    if (isShared()) { startPolling(); startLive(); }
     setInterval(() => { state.now = Date.now(); if (!state.sheet && (state.route === 'home' || state.route === 'drops')) renderMain(); }, 60000);
   }
 
-  window.KU = { state: state, boot: boot, posterFor: posterFor, slotsFor: slotsFor, monthStats: monthStats };
+  window.KU = { state: state, boot: boot, posterFor: posterFor, slotsFor: slotsFor, monthStats: monthStats, store: () => store };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();

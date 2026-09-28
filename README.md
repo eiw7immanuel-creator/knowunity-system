@@ -39,11 +39,11 @@ It starts in **"this device only"** mode with example data so every page has som
 
 ## Go live for the team
 
-1. **Deploy** (pick one):
-   - **GitHub Pages**: repository Settings → Pages → Source: *GitHub Actions*. The workflow in `.github/workflows/pages.yml` publishes the default branch on every push.
-   - **Vercel**: import the repository, framework preset *Other*, no build command, output directory `.`. Every push redeploys.
-2. **Share one board** across the team by connecting a free Supabase project: run `supabase/schema.sql`, paste the URL and key into `config.js`. Step by step in [docs/SETUP.md](docs/SETUP.md). Without this, each person sees only their own device's data.
-3. Send the link to Adam and the editor. Everyone picks their name on first open.
+1. **Vercel** hosts the app: import the repository, framework preset *Other*, no build command, output directory `.`. Every push redeploys.
+2. **Your Oracle Cloud VM** runs the team server: `git clone` this repository on the VM and run `sudo bash server/install.sh`. One command installs Node.js, Caddy with a free HTTPS certificate, a system service, and prints the API URL and a team key. Open ports 80/443 once in the Oracle console.
+3. **Connect** the app once: Settings → Team server → paste URL and key. Then **Settings → Team → Invite** copies a personal link for each person that connects their device and signs them in.
+
+Step by step, with troubleshooting: [docs/SETUP.md](docs/SETUP.md). The server pushes every change to all open phones within a second.
 
 ## Rules
 
@@ -63,12 +63,15 @@ Soft lavender background, white rounded cards, one purple accent, Nunito. To mat
 index.html            entry page
 styles.css            design tokens (light + dark), layout, components
 app.js                the application: state, turns, pages, sheets, actions, example data
-store.js              storage adapters: this browser, or Supabase for the team
-config.js             the only file to edit to connect Supabase
-supabase/schema.sql   one table + policies for the shared board
-docs/SETUP.md         deployment and Supabase walkthrough
+store.js              storage adapters: team server, Supabase (alternative), this browser
+config.js             optional pinned connection (normally untouched)
+server/server.js      the team server: zero dependencies, one JSON file, live push updates
+server/install.sh     one-command installer for an Oracle Cloud VM (Node, Caddy HTTPS, service)
+supabase/schema.sql   alternative backend
+docs/SETUP.md         Vercel + Oracle walkthrough with troubleshooting
 docs/PLAYBOOK.md      the working agreement, in Markdown
 tests/smoke.mjs       headless-browser test of the whole flow
+tests/sync.mjs        two browsers against the real team server
 ```
 
 ## Data model
@@ -90,4 +93,4 @@ node tests/smoke.mjs   # one browser: every page and the whole drop flow
 node tests/sync.mjs    # two browsers, one shared board (mock Supabase API)
 ```
 
-Both need Playwright and Chromium. The smoke test sends a drop, starts it, delivers four videos, approves, plans, posts, swaps a poster, filters the list, sends a video back with a note, checks the editor's home, changes settings, reloads to check persistence, clears the example data and checks the phone layout. The sync test runs a creator on desktop and the editor on a phone (signed in through the invite link) against an in-process imitation of Supabase's REST API, and checks that drops, deliveries, approvals, change notes and renames show up on the other side without a reload. Screenshots land in `tests/output/`.
+Both need Playwright and Chromium. The smoke test sends a drop, starts it, delivers four videos, approves, plans, posts, swaps a poster, filters the list, sends a video back with a note, checks the editor's home, changes settings, reloads to check persistence, clears the example data and checks the phone layout. The sync test starts the real team server, connects a creator on desktop, lets the editor join on a phone through the invite link, and checks that drops, deliveries, approvals, change notes and renames show up on the other side within seconds, that a wrong key is refused, and that the data survives a server restart. Screenshots land in `tests/output/`.

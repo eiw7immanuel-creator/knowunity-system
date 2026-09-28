@@ -1,79 +1,80 @@
-# Setup: deploy the app and share one board
+# Setup: Vercel + your Oracle Cloud VM
 
-Two independent decisions:
+Two parts, about ten minutes in total:
 
-1. **Where the page is hosted** (GitHub Pages or Vercel; either is fine, both are free).
-2. **Where the data lives.** Out of the box every browser keeps its own copy. To give Immanuel, Adam and the editors one shared board, connect Supabase (free tier is plenty). This takes about five minutes.
+1. **Vercel** hosts the app (the static files in this repository). Every push redeploys.
+2. **Your Oracle Cloud VM** runs the tiny team server (`server/server.js`) that holds the shared board and pushes every change to all open phones instantly.
 
-## 1. Hosting
+No secrets live in the repository. The connection is pasted into the app once and travels to the team inside their invite links.
 
-### GitHub Pages
+## 1. Vercel
 
-1. In the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. The workflow `.github/workflows/pages.yml` runs on every push to the default branch and publishes the repository as-is (there is nothing to build).
-3. The URL is shown in **Settings → Pages** and in the workflow run, in the form `https://<user>.github.io/knowunity-system/`.
+1. vercel.com → **Add New → Project** → import `knowunity-system` from GitHub.
+2. Framework preset **Other**. Leave *Build Command* empty, *Output Directory* `.` (a dot). Deploy.
+3. You get a URL like `https://knowunity-system.vercel.app`. Vercel deploys the repository's default branch on every push.
 
-If the first run fails with "Pages is not enabled", do step 1 and re-run the workflow from the **Actions** tab.
+`.vercelignore` keeps the server, tests and docs out of the deployment.
 
-### Vercel
+## 2. Team server on Oracle Cloud (one command)
 
-1. vercel.com → **Add New → Project** → import this repository.
-2. Framework preset **Other**. Leave *Build command* empty, *Output directory* `.` (a dot).
-3. Deploy. Every push to the default branch redeploys automatically.
+You need a VM with SSH access (an Always Free *Ampere A1* or *Micro* instance is plenty; Ubuntu or Oracle Linux both work).
 
-Both options serve the same files; nothing in the app depends on the host.
+```
+ssh ubuntu@<your-vm-ip>            # or opc@… on Oracle Linux
+git clone https://github.com/eiw7immanuel-creator/knowunity-system.git
+sudo bash knowunity-system/server/install.sh
+```
 
-## 2. One shared board with Supabase
+The installer installs Node.js and Caddy, creates a system service, gets a free HTTPS certificate for `<your-ip>.sslip.io`, opens ports 80/443 on the VM, and ends with:
 
-1. Create a free account at https://supabase.com and a new project (any region close to the team; remember the database password, you will not need it in the app).
-2. In the project, open **SQL Editor → New query**, paste the whole content of `supabase/schema.sql`, click **Run**. This creates the `items` table and its access policies.
-3. Open **Project Settings → API** (or **Connect** at the top). Copy:
-   - **Project URL**, e.g. `https://abcdefghijkl.supabase.co`
-   - the **anon / publishable** key (starts with `sb_publishable_` or `eyJ`). Never the service-role/secret key.
-4. Edit `config.js`:
+```
+   API URL:   https://130-61-1-2.sslip.io
+   Team key:  3f9c…
+```
 
-   ```js
-   window.KU_CONFIG = {
-     teamName: 'Knowunity Content',
-     supabase: {
-       url: 'https://abcdefghijkl.supabase.co',
-       anonKey: 'sb_publishable_…',
-       table: 'items'
-     }
-   };
-   ```
+**One thing only the Oracle console can do (once):** Networking → Virtual Cloud Networks → your VCN → Security Lists → Default Security List → **Add Ingress Rules**: Source `0.0.0.0/0`, protocol TCP, destination ports `80,443`. Without this, the VM is unreachable from the internet even though the installer opened the VM's own firewall.
 
-5. Commit and push. After the redeploy, **Settings → Data** reads **Shared board: everyone sees the same thing** instead of **Saved in this browser only**.
+Check from your laptop (the certificate can take about a minute the first time):
 
-The app talks to Supabase through its REST API, refreshes the board every 20 seconds while a tab is open, and on every return to the tab. Two people editing the same card at the same second: the last save wins.
+```
+curl https://130-61-1-2.sslip.io/api/health      → {"ok":true}
+```
 
-### Who can see and change the board
+Own domain instead of sslip.io: point an A record at the VM, then run `DOMAIN=board.example.com sudo -E bash knowunity-system/server/install.sh`.
 
-Anyone who has the deployed URL can read and write, because the anon key ships with the page. For a small trusted team that is the intended trade-off; there is nothing sensitive on the board itself, and the Drive links are protected by Drive's own sharing. If you ever want logins, enable Supabase Auth and change the four policies in `schema.sql` from `to anon, authenticated` to `to authenticated`.
+## 3. Connect the app (once, on your own phone or laptop)
 
-### Moving existing data into the shared board
+Open the Vercel URL → **Settings → Team server** → paste the API URL and the team key → **Connect**. If you already used the app on this device, the checkbox uploads that board to the (still empty) server; leave it unticked if it is only example data.
 
-If someone already used the app on their own device: **Team → Data & storage → Download backup** there, then on the shared version **Restore backup**. Restoring replaces the whole board.
+Settings then shows **Live** and the last sync time.
 
-## 3. First run and inviting the team
+## 4. Invite the team
 
-1. Open the link and pick your own name.
-2. **Settings → Team**: rename *Editor 1* to the editor's real name, add more people if needed.
-3. **Settings → Team → Invite** next to a person copies a ready-made message: a personal link (`…#as-<id>`) plus a three-line explanation of what they do. Paste it into WhatsApp. Whoever opens that link is signed in as that person on that device, with no question asked, and sees their own Home (the editor: one card per drop with **Open footage** and **Deliver**).
-4. **Settings → Posting turns**: pick the mode (daily turns is the default) and who starts. Check the "Next 7 days" preview.
-5. **Settings → Drive folders**: paste the standing Raw / Edits / Assets folders.
-6. Send the first drop, then tap **Copy message for editor** and paste it into the chat. The board shows the drop on the editor's Home within seconds, but it does not send notifications by itself.
+**Settings → Team**: rename *Editor 1* to the editor's real name, add anyone else. Then tap **Invite** next to a person and paste the copied message into WhatsApp. The link inside carries the server connection and who they are: opening it connects the device and signs them in, with no question asked. The editor lands on a Home with one card per drop, **Open footage** and **Deliver**.
 
-## 4. How the live sync works
+When you send a drop, tap **Copy message for editor** and paste it into the chat: the drop shows up on the editor's Home within a second, but the board itself does not send notifications.
 
-With Supabase connected, every open tab checks the server every 8 seconds (a few kilobytes: ids and timestamps), downloads the board only when something changed, checks again 3 seconds after its own saves, and refreshes whenever the tab is brought back to the front. In practice a change made by one person shows up for the others within about 10 seconds, without reloading. **Settings → Data** shows the last sync time.
+## 5. How the live sync works
+
+Every open tab keeps a connection to the server (Server-Sent Events). When anyone saves, the server tells every tab and each one refreshes within about a second. If the connection drops (phone in a pocket, VM restarting), the tab shows *Reconnecting…*, checks the server every 8 seconds and reconnects by itself. Bringing a tab back to the front always refreshes it. In the automated test (`node tests/sync.mjs`) changes reached the other browser in under two seconds.
+
+## 6. Backups, updates, security
+
+- **Data**: `/var/lib/knowunity/items.json` on the VM, plus a daily copy in `/var/lib/knowunity/backups/` (14 kept). **Settings → Data → Download backup** saves the same thing from any device; **Restore backup** puts it back.
+- **Update the server**: on the VM, `cd knowunity-system && git pull && sudo bash server/install.sh` (keeps the key and the data).
+- **Who can access the board**: anyone who has the team key, which is inside every invite link. Share invites privately. To lock someone out, change `KU_KEY` in `/etc/knowunity/env`, run `sudo systemctl restart knowunity-api`, then re-invite everyone.
+- The repository and the Vercel site contain no secrets.
 
 ## Troubleshooting
 
 | Symptom | What to check |
 |---|---|
-| A red **Could not save** message pops up | `config.js` URL or key has a typo, or `schema.sql` was not run (the policies are what allow the anon key to write). The message contains the exact error. |
-| Board is empty on a colleague's phone | They are looking at a deployment without Supabase (each device keeps its own data). Complete section 2. |
-| Fonts look different offline | The typefaces load from Google Fonts; without internet the system font is used. Everything still works. |
-| A day shows the wrong poster | Check **Team → Posting rota** (mode, start date, first poster) and whether the day has a swap (ringed avatar in the calendar). |
-| Downloads do nothing | Some embedded viewers block downloads. Use **Copy backup** and paste into a file instead. |
+| **Could not reach the server** when connecting | The ingress rule for 80/443 in the Oracle console (step 2). Then `sudo systemctl status knowunity-api caddy` on the VM. |
+| **Team key not accepted** | Copy the key again from `/etc/knowunity/env` on the VM. |
+| `curl https://…/api/health` fails with a certificate error | Caddy is still fetching the certificate; wait a minute and try again. `sudo journalctl -u caddy -n 30` shows progress. |
+| A colleague's phone shows an empty board | They opened the plain site instead of their invite link. Send the invite again. |
+| Settings shows **Reconnecting…** for long | The VM is down or the ports closed. Data is safe on the server; the phone catches up when it is back. |
+
+## Alternative: Supabase
+
+If you would rather not run a VM, `supabase/schema.sql` and the `supabase` section of `config.js` connect the same app to a free Supabase project (polling instead of instant push).

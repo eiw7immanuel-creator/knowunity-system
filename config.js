@@ -1,24 +1,22 @@
 /* ==========================================================================
    Knowunity Content OS — configuration
-   This is the only file you need to touch to connect the team board.
 
-   Leave `supabase.url` and `supabase.anonKey` empty and the app runs in
-   "this device only" mode: everything is saved in the browser you open it in.
-   That is perfect for trying it out, but the team will not see each other's
-   changes.
+   You normally do not need to edit this file.
 
-   To share ONE board with Immanuel, Adam and the editors:
-     1. Create a free project at https://supabase.com
-     2. Open the SQL editor and run the contents of supabase/schema.sql
-     3. Project settings -> API: copy the Project URL and the anon/publishable key
-     4. Paste them below, commit, and redeploy. Done.
-   Full walkthrough: docs/SETUP.md
+   The team server (server/ on your Oracle Cloud VM) is connected from inside
+   the app: Settings → Data → Connect team server, paste the API URL and the
+   team key the installer printed. Everyone else gets it through their invite
+   link (Settings → Team → Invite), so the key never has to live in the code.
+
+   Optional: if this repository is private you may pin the connection here
+   instead, so every device is connected without pasting anything.
+   Leave both empty otherwise.
    ========================================================================== */
 window.KU_CONFIG = {
   teamName: 'Knowunity Content',
-  supabase: {
-    url: '',      // e.g. 'https://abcdefghijkl.supabase.co'
-    anonKey: '',  // e.g. 'sb_publishable_...' or 'eyJhbGciOi...'
-    table: 'items'
-  }
+  api: {
+    url: '',   // e.g. 'https://130-61-1-2.sslip.io'
+    key: ''    // the team key printed by server/install.sh
+  },
+  supabase: { url: '', anonKey: '', table: 'items' } // alternative backend, see docs/SETUP.md
 };
