@@ -574,7 +574,7 @@
       const cta = d.status === 'sent'
         ? '<button type="button" class="btn btn-primary btn-lg" data-action="dropStart" data-id="' + d.id + '">' + I.check + ' Start editing</button>'
         : '<button type="button" class="btn btn-primary btn-lg" data-action="openDeliver" data-id="' + d.id + '">' + I.send + ' Deliver</button>';
-      return '<section class="card">' + cardHead(esc(d.title), '<span class="mono">' + dropCode(d) + '</span> · from ' + esc(memberName(d.sentBy)) + ' · ' + plural((d.clips || []).length, 'clip') + ' · ' + d.targetVideos + ' videos wanted', dueChip(d)) +
+      return '<section class="card">' + cardHead(esc(d.title), '<span class="mono">' + dropCode(d) + '</span> · from ' + esc(memberName(d.sentBy)) + ((d.clips || []).length ? ' · ' + plural(d.clips.length, 'clip') : '') + ' · ' + d.targetVideos + ' videos wanted', dueChip(d)) +
         '<div class="stack-sm"><div class="note"><b>' + (late ? 'Deadline passed: ' : 'Deadline: ') + esc(fmtDT(d.dueAt)) + '</b>' + (d.brief ? '<div class="wrap mt">' + esc(d.brief) + '</div>' : '') + '</div>' +
         '<div class="row">' + cta + (d.driveLink ? '<a class="btn btn-lg" href="' + esc(d.driveLink) + '" target="_blank" rel="noopener">' + I.ext + ' Open footage</a>' : '<span class="hint">No footage link yet, ask ' + esc(firstName(memberName(d.sentBy))) + '.</span>') + '<button type="button" class="btn btn-ghost" data-action="openDrop" data-id="' + d.id + '">Details</button></div></div></section>';
     }).join('');
