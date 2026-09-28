@@ -43,7 +43,7 @@ Both options serve the same files; nothing in the app depends on the host.
    };
    ```
 
-5. Commit and push. After the redeploy the footer of the sidebar reads **Shared board · synced** instead of **Saved on this device**.
+5. Commit and push. After the redeploy, **Settings → Data** reads **Shared board: everyone sees the same thing** instead of **Saved in this browser only**.
 
 The app talks to Supabase through its REST API, refreshes the board every 20 seconds while a tab is open, and on every return to the tab. Two people editing the same card at the same second: the last save wins.
 
@@ -67,7 +67,7 @@ If someone already used the app on their own device: **Team → Data & storage �
 
 | Symptom | What to check |
 |---|---|
-| Sidebar says **Save failed** | `config.js` URL or key has a typo, or `schema.sql` was not run (the policies are what allow the anon key to write). Hover the status for the exact error. |
+| A red **Could not save** message pops up | `config.js` URL or key has a typo, or `schema.sql` was not run (the policies are what allow the anon key to write). The message contains the exact error. |
 | Board is empty on a colleague's phone | They are looking at a deployment without Supabase (each device keeps its own data). Complete section 2. |
 | Fonts look different offline | The typefaces load from Google Fonts; without internet the system font is used. Everything still works. |
 | A day shows the wrong poster | Check **Team → Posting rota** (mode, start date, first poster) and whether the day has a swap (ringed avatar in the calendar). |

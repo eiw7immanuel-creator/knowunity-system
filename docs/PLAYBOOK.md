@@ -1,6 +1,6 @@
 # Playbook: how the Knowunity content team works
 
-Short enough to read in five minutes, precise enough to remove every hand-off question. The same text lives inside the app under **Playbook**, where the numbers follow your settings; the defaults are used here.
+Short enough to read in five minutes, precise enough to remove every hand-off question. The short version lives inside the app under **How it works**, where the numbers follow your settings; the defaults are used here.
 
 ## The goal in numbers
 
