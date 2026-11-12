@@ -125,7 +125,7 @@
   const COLORS = ['teal', 'orange', 'pink', 'blue', 'green', 'gold'];
   const LIGHT_COLORS = { gold: true };
   const COLOR_MIGRATION = { violet: 'pink', magenta: 'pink', yellow: 'gold', aqua: 'teal', red: 'orange' };
-  const PLATFORMS = [['instagram', 'IG', 'Instagram'], ['tiktok', 'TT', 'TikTok']];
+  const PLATFORMS = [['instagram', 'IG', 'Instagram'], ['tiktok', 'TT', 'TikTok'], ['youtube', 'YT', 'YouTube']];
 
   const DEFAULT_SETTINGS = {
     id: SETTINGS_ID,
@@ -223,8 +223,9 @@
   const dropCode = (d) => 'D' + String(d.number).padStart(2, '0');
   const openDrops = () => drops().filter((d) => d.status === 'sent' || d.status === 'editing');
   const isOnCalendar = (v) => (v.status === 'scheduled' || v.status === 'posted') && !!v.scheduledDate;
-  const blankPlatforms = () => ({ instagram: { posted: false, at: null }, tiktok: { posted: false, at: null } });
-  const platforms = (v) => { if (!v.platforms || !v.platforms.instagram || !v.platforms.tiktok) v.platforms = blankPlatforms(); return v.platforms; };
+  const blankPlatforms = () => { const p = {}; PLATFORMS.forEach((pl) => { p[pl[0]] = { posted: false, at: null }; }); return p; };
+  /* every video gets one entry per platform; older records are topped up (e.g. when YouTube was added) */
+  const platforms = (v) => { if (!v.platforms || typeof v.platforms !== 'object') v.platforms = blankPlatforms(); PLATFORMS.forEach((pl) => { if (!v.platforms[pl[0]]) v.platforms[pl[0]] = { posted: false, at: null }; }); return v.platforms; };
 
   /* ------------------------------------------------------------------------
      4. Domain logic
@@ -352,7 +353,7 @@
     if ((status === 'approved' || status === 'scheduled' || status === 'posted') && !v.approvedAt) v.approvedAt = now;
     if (status === 'scheduled' && !v.scheduledDate) { v.scheduledDate = todayKey(); v.slot = nextFreeSlot(v.scheduledDate); }
     if (status === 'posted') {
-      v.platforms = { instagram: { posted: true, at: now }, tiktok: { posted: true, at: now } };
+      v.platforms = {}; PLATFORMS.forEach((pl) => { v.platforms[pl[0]] = { posted: true, at: now }; });
       if (!v.scheduledDate) { v.scheduledDate = todayKey(); v.slot = nextFreeSlot(v.scheduledDate); }
       v.postedDate = v.scheduledDate; v.postedAt = now;
     }
@@ -360,8 +361,8 @@
   function setPlatform(v, platform, on) {
     const p = platforms(v);
     p[platform] = { posted: !!on, at: on ? nowIso() : null };
-    const both = p.instagram.posted && p.tiktok.posted;
-    if (both) {
+    const all = PLATFORMS.every((pl) => p[pl[0]].posted);
+    if (all) {
       if (!v.scheduledDate) { v.scheduledDate = todayKey(); v.slot = nextFreeSlot(v.scheduledDate); }
       v.status = 'posted'; v.postedDate = v.scheduledDate; v.postedAt = v.postedAt || nowIso();
       if (!v.approvedAt) v.approvedAt = nowIso();
@@ -423,7 +424,7 @@
     slotsFor(key).forEach((s) => {
       lines.push(s.slot + '. ' + (s.video ? (s.video.title + (s.video.fileLink ? ' — ' + s.video.fileLink : '') + (s.video.caption ? '\n   Caption: ' + s.video.caption : '')) : '(nothing planned)'));
     });
-    lines.push('Post on Instagram + TikTok, then tick both in the app.');
+    lines.push('Post on Instagram, TikTok and YouTube, then tick all three in the app.');
     return lines.join('\n');
   }
 
@@ -466,6 +467,7 @@
     const pl = PLATFORMS.find((x) => x[0] === key);
     return '<button type="button" class="toggle' + (on ? ' is-on' : '') + '" data-action="platform" data-id="' + v.id + '" data-platform="' + key + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + (on ? I.check : '<span class="ring"></span>') + esc(pl[2]) + '</button>';
   }
+  const platformToggles = (v) => PLATFORMS.map((pl) => toggleBtn(v, pl[0])).join('');
   function selectHtml(name, options, value, attrs) {
     return '<select name="' + esc(name) + '" ' + (attrs || '') + '>' + options.map((o) => '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value == null ? '' : value) ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select>';
   }
@@ -479,7 +481,7 @@
     const tk = todayKey();
     return '<span class="dots">' + ds.slots.map((sl) => {
       let c = key < tk ? 'is-miss' : 'is-empty';
-      if (sl.video) { const p = platforms(sl.video); c = sl.video.status === 'posted' ? 'is-done' : (p.instagram.posted || p.tiktok.posted) ? 'is-half' : 'is-plan'; }
+      if (sl.video) { const p = platforms(sl.video); c = sl.video.status === 'posted' ? 'is-done' : PLATFORMS.some((pl) => p[pl[0]].posted) ? 'is-half' : 'is-plan'; }
       return '<span class="dot ' + c + '"></span>';
     }).join('') + '</span>';
   }
@@ -492,7 +494,7 @@
     }
     return '<div class="week">' + out + '</div>';
   }
-  const legend = () => '<div class="legend"><span><span class="dot is-done"></span>posted</span><span><span class="dot is-half"></span>one platform</span><span><span class="dot is-plan"></span>planned</span><span><span class="dot is-empty"></span>empty</span><span><span class="dot is-miss"></span>missed</span></div>';
+  const legend = () => '<div class="legend"><span><span class="dot is-done"></span>posted</span><span><span class="dot is-half"></span>partly posted</span><span><span class="dot is-plan"></span>planned</span><span><span class="dot is-empty"></span>empty</span><span><span class="dot is-miss"></span>missed</span></div>';
 
   function videoItem(v, opts) {
     const d = getItem(v.dropId);
@@ -514,7 +516,7 @@
       return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title muted">Nothing planned yet</div><div class="slot-row mt">' + (ready ? '<button type="button" class="btn btn-sm" data-action="openPick" data-date="' + key + '" data-slot="' + sl.slot + '" data-back="close">Pick a video</button>' : '<span class="hint">Approve a video first, then it can go here.</span>') + '</div></div></div>';
     }
     const d = getItem(v.dropId);
-    return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title">' + esc(v.title) + '</div><div class="slot-sub"><span class="mono">' + esc(v.code) + '</span>' + (d ? ' · ' + esc(d.title) : '') + (v.status === 'posted' ? ' · posted ✓' : '') + '</div><div class="slot-row">' + toggleBtn(v, 'instagram') + toggleBtn(v, 'tiktok') + linkBtn(v.fileLink, 'Watch') + (v.caption ? '<button type="button" class="btn btn-sm" data-action="copyText" data-text="' + esc(v.caption) + '" data-label="Caption copied">' + I.copy + ' Caption</button>' : '') + '<button type="button" class="btn btn-sm btn-ghost" data-action="openVideo" data-id="' + v.id + '">Details</button></div></div></div>';
+    return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title">' + esc(v.title) + '</div><div class="slot-sub"><span class="mono">' + esc(v.code) + '</span>' + (d ? ' · ' + esc(d.title) : '') + (v.status === 'posted' ? ' · posted ✓' : '') + '</div><div class="slot-row">' + platformToggles(v) + linkBtn(v.fileLink, 'Watch') + (v.caption ? '<button type="button" class="btn btn-sm" data-action="copyText" data-text="' + esc(v.caption) + '" data-label="Caption copied">' + I.copy + ' Caption</button>' : '') + '<button type="button" class="btn btn-sm btn-ghost" data-action="openVideo" data-id="' + v.id + '">Details</button></div></div></div>';
   }
 
   /* ---- Home ---- */
@@ -540,7 +542,7 @@
     const pct = st.target ? Math.min(100, Math.round(100 * st.posted / st.target)) : 0;
     const pace = st.remaining === 0 ? chip('Target reached 🎉', 'good') : st.diff >= 0 ? chip(st.diff === 0 ? 'On track' : st.diff + ' ahead', 'good') : chip(Math.abs(st.diff) + ' behind', st.diff < -4 ? 'bad' : 'warn');
     const need = st.remaining === 0 ? 'Everything for this month is out. Nice.' : st.remainingDays === 0 ? plural(st.remaining, 'post') + ' short this month.' : plural(st.remaining, 'more post') + ' to go · ' + plural(st.remainingDays, 'day') + ' left · about ' + (Math.round(st.perDay * 10) / 10) + ' a day';
-    const progress = '<section class="card">' + cardHead(esc(fmtMonth(mk)), 'Instagram + TikTok, both ticked = one post', pace) + '<div class="progress-top"><span class="progress-num">' + st.posted + '</span><span class="progress-of">of ' + st.target + ' posts</span></div><div class="progress"><div class="progress-fill" style="width:' + pct + '%"></div></div><div class="small muted">' + esc(need) + '</div></section>';
+    const progress = '<section class="card">' + cardHead(esc(fmtMonth(mk)), 'Instagram, TikTok and YouTube Shorts. All three ticked = one post', pace) + '<div class="progress-top"><span class="progress-num">' + st.posted + '</span><span class="progress-of">of ' + st.target + ' posts</span></div><div class="progress"><div class="progress-fill" style="width:' + pct + '%"></div></div><div class="small muted">' + esc(need) + '</div></section>';
 
     const today = '<section class="card">' + cardHead('Today', poster ? esc(memberName(poster.id)) + ' posts' + (poster.source === 'override' ? ' (swapped in' + (poster.note ? ': ' + esc(poster.note) : '') + ')' : '') : 'No poster yet. Add creators in Settings.', '<button type="button" class="btn btn-sm" data-action="copyDay" data-date="' + tk + '">' + I.copy + ' Copy plan</button>') + '<div>' + ds.slots.map((sl) => slotRow(sl, tk)).join('') + '</div></section>';
 
@@ -737,9 +739,9 @@
       '<section class="card"><div class="stack">' +
       '<div class="step"><div class="step-num">1</div><div><h3>Film and send a drop</h3><p>' + esc(who) + ' film a batch, upload the raw clips to Drive and tap <b>Send a drop</b> with the link. The editor gets a deadline automatically: <b>' + s.editorSlaHours + ' hours</b>. About ' + m.clips + ' clips make the ' + m.perDrop + ' videos one drop should produce.</p></div></div>' +
       '<div class="step"><div class="step-num">2</div><div><h3>Editor delivers</h3><p>The editor taps <b>Start editing</b>, makes the videos, uploads them to the drop\'s Edits folder and taps <b>Deliver</b>: paste the folder link and write one title per line. That is the whole hand-off.</p></div></div>' +
-      '<div class="step"><div class="step-num">3</div><div><h3>Approve and post</h3><p>A creator taps <b>Approve</b> on each video (or sends it back with a note). Approved videos fill the calendar, ' + s.postsPerDay + ' a day. On the day, the poster opens Home, posts on Instagram and TikTok, and ticks both. That counts as one of the ' + s.monthlyTarget + ' posts.</p></div></div>' +
+      '<div class="step"><div class="step-num">3</div><div><h3>Approve and post</h3><p>A creator taps <b>Approve</b> on each video (or sends it back with a note). Approved videos fill the calendar, ' + s.postsPerDay + ' a day. On the day, the poster opens Home, posts on Instagram, TikTok and YouTube Shorts, and ticks all three. That counts as one of the ' + s.monthlyTarget + ' posts.</p></div></div>' +
       '</div></section>' +
-      '<section class="card">' + cardHead('Words we use') + '<dl class="kv"><dt>Drop</dt><dd>One batch of raw footage sent to the editor.</dd><dt>Ready</dt><dd>An approved video waiting for a day on the calendar.</dd><dt>Slot</dt><dd>One posting moment. Every day has ' + s.postsPerDay + '.</dd><dt>Posted</dt><dd>Both Instagram and TikTok are ticked.</dd><dt>Code</dt><dd><span class="mono">D07-C03-v2</span> = drop 7, clip 3, variation 2. Name the exported file after it so anyone can find the source clip.</dd></dl></section>' +
+      '<section class="card">' + cardHead('Words we use') + '<dl class="kv"><dt>Drop</dt><dd>One batch of raw footage sent to the editor.</dd><dt>Ready</dt><dd>An approved video waiting for a day on the calendar.</dd><dt>Slot</dt><dd>One posting moment. Every day has ' + s.postsPerDay + '.</dd><dt>Posted</dt><dd>Instagram, TikTok and YouTube are all ticked.</dd><dt>Code</dt><dd><span class="mono">D07-C03-v2</span> = drop 7, clip 3, variation 2. Name the exported file after it so anyone can find the source clip.</dd></dl></section>' +
       '<section class="card">' + cardHead('Drive folders') + '<div class="tree">Knowunity Content/\n  Brand assets/          logos, fonts, music\n  Drops/\n    2026-09/\n      D07/\n        RAW/             files straight from the phone\n        EDITS/           D07-C01-v1_exam-trick.mp4\n                         D07-C01-v2_exam-trick-subtitles.mp4</div><p class="small muted mt">Exports: 9:16, 1080 × 1920, MP4, no platform watermark. Upload the same clean file to both platforms.</p></section>' +
       '<section class="card is-soft"><div class="card-title">If something slips</div><ul class="mt"><li><b>Drop late:</b> it turns red on Home. Ping the editor with the copied message, or reassign the drop.</li><li><b>Poster away:</b> open that day in the Calendar and swap the poster.</li><li><b>Empty days ahead:</b> tap <b>Fill empty days</b>. If nothing is Ready, send the next drop early.</li></ul></section>' +
       '</div>';
@@ -847,7 +849,7 @@
     const slotOpts = []; for (let i = 1; i <= Math.max(1, S().postsPerDay); i++) slotOpts.push({ value: i, label: 'Slot ' + i });
     const body = '<div class="row">' + statusChip(v) + memberChip(v.editorId) + (v.status === 'posted' && v.postedDate ? '<span class="small muted">posted ' + esc(fmtDay(v.postedDate)) + '</span>' : '') + '</div>' +
       '<div class="row">' + actions + linkBtn(v.fileLink, 'Watch', '') + '</div>' +
-      (onCal ? '<div class="sec"><div class="sec-title">Posted on</div><div class="row">' + toggleBtn(v, 'instagram') + toggleBtn(v, 'tiktok') + '</div><div class="hint">Both ticked = posted and counted for the month.</div></div>' : '') +
+      (onCal ? '<div class="sec"><div class="sec-title">Posted on</div><div class="row">' + platformToggles(v) + '</div><div class="hint">All three ticked = posted and counted for the month.</div></div>' : '') +
       (v.status !== 'editing' && v.status !== 'delivered' && v.status !== 'changes' ? '<div class="sec"><div class="sec-title">' + (onCal ? 'Planned for' : 'Plan it') + '</div><div class="two"><div class="field"><label for="vDate">Day</label><input type="date" id="vDate" name="scheduledDate" value="' + esc(v.scheduledDate || '') + '"' + (ctx.focus === 'schedule' ? ' autofocus' : '') + '></div><div class="field"><label for="vSlot">Slot</label>' + selectHtml('slot', slotOpts, v.slot || 1, 'id="vSlot"') + '</div></div><div class="field"><label for="vPoster">Who posts it</label>' + selectHtml('posterId', posterOpts, v.posterId || '', 'id="vPoster"') + '</div><div class="row"><button type="button" class="btn btn-primary btn-sm" data-action="videoSchedule" data-id="' + v.id + '">' + I.calendar + ' ' + (onCal ? 'Move' : 'Put on the calendar') + '</button></div></div>' : '') +
       '<div class="sec"><div class="sec-title">Caption</div><textarea id="vCaption" name="caption" rows="3" placeholder="First line is the hook. Hashtags at the end.">' + esc(v.caption || '') + '</textarea>' + (v.caption ? '<div class="row"><button type="button" class="btn btn-sm" data-action="copyText" data-text="' + esc(v.caption) + '" data-label="Caption copied">' + I.copy + ' Copy caption</button></div>' : '') + '</div>' +
       '<div class="sec"><div class="sec-title">Notes</div><textarea id="vNotes" name="notes" rows="2" placeholder="Feedback, change requests, ideas">' + esc(v.notes || '') + '</textarea></div>' +
@@ -878,7 +880,7 @@
       if (!sl.video) return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title muted">Nothing planned</div><div class="slot-row mt">' + (ready ? '<button type="button" class="btn btn-sm" data-action="openPick" data-date="' + key + '" data-slot="' + sl.slot + '" data-back="day">Pick a video</button>' : '<span class="hint">No ready videos yet.</span>') + '</div></div></div>';
       const v = sl.video;
       const d = getItem(v.dropId);
-      return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title">' + esc(v.title) + '</div><div class="slot-sub"><span class="mono">' + esc(v.code) + '</span>' + (d ? ' · ' + esc(d.title) : '') + '</div><div class="slot-row">' + toggleBtn(v, 'instagram') + toggleBtn(v, 'tiktok') + linkBtn(v.fileLink, 'Watch') + '<button type="button" class="btn btn-sm btn-ghost" data-action="videoStatus" data-id="' + v.id + '" data-status="approved" data-back="day" data-date="' + key + '">Remove</button></div></div></div>';
+      return '<div class="slot"><div class="slot-n">' + sl.slot + '</div><div class="grow"><div class="slot-title">' + esc(v.title) + '</div><div class="slot-sub"><span class="mono">' + esc(v.code) + '</span>' + (d ? ' · ' + esc(d.title) : '') + '</div><div class="slot-row">' + platformToggles(v) + linkBtn(v.fileLink, 'Watch') + '<button type="button" class="btn btn-sm btn-ghost" data-action="videoStatus" data-id="' + v.id + '" data-status="approved" data-back="day" data-date="' + key + '">Remove</button></div></div></div>';
     }).join('');
     const posterOpts = [{ value: '', label: 'Whoever has the turn' + (p && p.source === 'rota' ? ' (' + memberName(p.id) + ')' : '') }].concat(creators().map((m) => ({ value: m.id, label: m.name })));
     const body = '<div class="row">' + (p ? avatar(p.id, 'avatar-lg', ov ? 'is-swapped' : '') + '<div><div class="item-title">' + esc(memberName(p.id)) + ' posts</div><div class="item-sub">' + (ov ? 'swapped in' + (ov.note ? ' · ' + esc(ov.note) : '') : 'their turn') + '</div></div>' : '<span class="muted">No creators yet.</span>') + '</div>' +
@@ -1074,7 +1076,7 @@
     return [
       'Hi ' + firstName(m.name) + '! 👋 This is our content board: ' + link,
       'It already knows you are ' + m.name + '. Home shows what to post today, what to approve and what is with the editor.',
-      'Send footage with "Send a drop", approve with one tap, and tick Instagram + TikTok after posting.'
+      'Send footage with "Send a drop", approve with one tap, and tick Instagram, TikTok and YouTube after posting.'
     ].join('\n');
   }
   function welcomeCard(role, m) {
@@ -1240,7 +1242,7 @@
       setPlatform(v, ds.platform, on);
       await save('video', v);
       refreshSheet();
-      if (v.status === 'posted') toast('Posted on both. ' + monthStats(monthOf(v.postedDate)).posted + ' this month 🎉');
+      if (v.status === 'posted') toast('Posted everywhere. ' + monthStats(monthOf(v.postedDate)).posted + ' this month 🎉');
     },
     openChanges: (ds) => openSheet({ type: 'changes', id: ds.id }),
     saveChanges: async (ds, form) => {
@@ -1571,7 +1573,7 @@
         const v = queue[qi++];
         const when = at(key, slot === 1 ? 12 : 18, 15);
         v.status = 'posted'; v.scheduledDate = key; v.slot = slot; v.postedDate = key; v.postedAt = when; v.approvedAt = addHoursIso(v.deliveredAt, 5);
-        v.platforms = { instagram: { posted: true, at: when }, tiktok: { posted: true, at: addHoursIso(when, 0.25) } };
+        v.platforms = { instagram: { posted: true, at: when }, tiktok: { posted: true, at: addHoursIso(when, 0.25) }, youtube: { posted: true, at: addHoursIso(when, 0.5) } };
       }
     }
     const rest = d3v.slice(13);

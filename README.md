@@ -12,7 +12,7 @@ Immanuel and Adam film in batches, two or three times a month. Each batch is a *
 
 | Person | Home shows | Tabs |
 |---|---|---|
-| **Creator** (Immanuel, Adam) | Month progress, today's two posts with Instagram/TikTok ticks, videos to review with Approve buttons, what is with the editor, the next 7 days | Home · Calendar · Drops · Videos · Settings |
+| **Creator** (Immanuel, Adam) | Month progress, today's two posts with Instagram / TikTok / YouTube ticks, videos to review with Approve buttons, what is with the editor, the next 7 days | Home · Calendar · Drops · Videos · Settings |
 | **Editor** | One big card per drop with the deadline, the notes, **Open footage** and one button (**Start editing** or **Deliver**), plus any video sent back with a note | Home · Videos · How it works |
 
 Everyone gets a personal invite link (**Settings → Team → Invite** copies it together with a three-line explanation). Opening it signs that device in as that person, so the editor never sees a chooser or a setting. Nothing is locked; it only decides what Home shows first.
@@ -48,7 +48,7 @@ Step by step, with troubleshooting: [docs/SETUP.md](docs/SETUP.md). The server p
 ## Rules
 
 - **Editor turnaround: 24 h** from the moment a drop is sent. **Review: 24 h** from delivery. Both are settings.
-- **A video is posted** when both Instagram and TikTok are ticked. Only posted videos count toward the monthly target.
+- **A video is posted** when Instagram, TikTok and YouTube Shorts are all ticked. Only posted videos count toward the monthly target.
 - The board is the source of truth. If it is right, nobody has to ask.
 
 The full process is in [docs/PLAYBOOK.md](docs/PLAYBOOK.md).

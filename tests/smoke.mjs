@@ -162,8 +162,11 @@ await page.click('.sheet [data-action="platform"][data-platform="instagram"][dat
 await page.waitForFunction((id) => window.KU.state.items.get(id).data.platforms.instagram.posted === true, firstId);
 check((await video(firstId)).status === 'scheduled', 'one platform ticked → still planned (partial)');
 await page.click('.sheet [data-action="platform"][data-platform="tiktok"][data-id="' + firstId + '"]');
+await page.waitForFunction((id) => window.KU.state.items.get(id).data.platforms.tiktok.posted === true, firstId);
+check((await video(firstId)).status === 'scheduled', 'two of three ticked → still planned');
+await page.click('.sheet [data-action="platform"][data-platform="youtube"][data-id="' + firstId + '"]');
 await page.waitForFunction((id) => window.KU.state.items.get(id).data.status === 'posted', firstId);
-check((await video(firstId)).postedDate === target, 'both ticked → posted, counted on ' + target);
+check((await video(firstId)).postedDate === target, 'all three ticked → posted, counted on ' + target);
 await snap('06-day-sheet');
 await page.keyboard.press('Escape');
 await noSheet();
